@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Heart, Globe } from 'lucide-react';
+import { Heart, Globe, LogIn, LogOut, User } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,6 +7,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 
 const languages = [
   { code: 'en', name: 'English' },
@@ -24,6 +26,12 @@ interface HeaderProps {
 
 export const Header = ({ selectedLanguage, onLanguageChange }: HeaderProps) => {
   const currentLanguage = languages.find(l => l.code === selectedLanguage) || languages[0];
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <motion.header
@@ -47,25 +55,65 @@ export const Header = ({ selectedLanguage, onLanguageChange }: HeaderProps) => {
           </div>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Globe className="w-4 h-4" />
-              {currentLanguage.name}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {languages.map((lang) => (
-              <DropdownMenuItem
-                key={lang.code}
-                onClick={() => onLanguageChange(lang.code)}
-                className={selectedLanguage === lang.code ? 'bg-muted' : ''}
+        <div className="flex items-center gap-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Globe className="w-4 h-4" />
+                <span className="hidden sm:inline">{currentLanguage.name}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {languages.map((lang) => (
+                <DropdownMenuItem
+                  key={lang.code}
+                  onClick={() => onLanguageChange(lang.code)}
+                  className={selectedLanguage === lang.code ? 'bg-muted' : ''}
+                >
+                  {lang.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <User className="w-4 h-4" />
+                  <span className="hidden sm:inline truncate max-w-[120px]">
+                    {user.email}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleSignOut} className="gap-2 text-destructive">
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/auth')}
+                className="gap-2"
               >
-                {lang.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <LogIn className="w-4 h-4" />
+                <span className="hidden sm:inline">Login</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => navigate('/auth')}
+                className="bg-gradient-hero hover:opacity-90"
+              >
+                Sign Up
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </motion.header>
   );
