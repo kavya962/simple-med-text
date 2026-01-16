@@ -45,7 +45,9 @@ export const ReportHistory = ({ onSelectReport, refreshTrigger }: ReportHistoryP
       .limit(20);
 
     if (error) {
-      console.error('Error fetching reports:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error fetching reports:', error);
+      }
       toast.error('Failed to load history');
     } else {
       const typedData = (data || []).map(item => ({
