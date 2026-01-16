@@ -1,9 +1,45 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import * as pdfjs from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+async function extractPdfText(base64Data: string): Promise<string> {
+  try {
+    // Remove data URL prefix if present
+    const base64Clean = base64Data.replace(/^data:application\/pdf;base64,/, "");
+    
+    // Convert base64 to Uint8Array
+    const binaryString = atob(base64Clean);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Load PDF document
+    const loadingTask = pdfjs.getDocument({ data: bytes });
+    const pdf = await loadingTask.promise;
+    
+    let fullText = "";
+    
+    // Extract text from each page
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ");
+      fullText += pageText + "\n";
+    }
+    
+    return fullText.trim();
+  } catch (error) {
+    console.error("PDF extraction error:", error);
+    throw new Error("Failed to read PDF. The file may be corrupted or password-protected.");
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,11 +47,11 @@ serve(async (req) => {
   }
 
   try {
-    const { reportText, imageData, language = "en" } = await req.json();
+    const { reportText, imageData, pdfData, language = "en" } = await req.json();
     
-    if (!reportText && !imageData) {
+    if (!reportText && !imageData && !pdfData) {
       return new Response(
-        JSON.stringify({ error: "Please upload a medical report (image or text file)" }),
+        JSON.stringify({ error: "Please upload a medical report (PDF, image, or text file)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -27,6 +63,24 @@ serve(async (req) => {
         JSON.stringify({ error: "AI service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Extract text from PDF if provided
+    let extractedText = reportText;
+    if (pdfData) {
+      console.log("Extracting text from PDF...");
+      extractedText = await extractPdfText(pdfData);
+      
+      if (!extractedText || extractedText.trim().length < 50) {
+        // PDF might be scanned/image-based, try to inform user
+        return new Response(
+          JSON.stringify({ 
+            error: "Could not extract text from this PDF. It may be a scanned document. Please upload an image (JPG, PNG) of your report instead." 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      console.log("PDF text extracted successfully, length:", extractedText.length);
     }
 
     const languageInstructions = language !== "en" 
@@ -76,7 +130,7 @@ IMPORTANT RULES:
         { type: "image_url", image_url: { url: imageData } }
       ];
     } else {
-      userContent = `Please validate and analyze this medical report:\n\n${reportText}`;
+      userContent = `Please validate and analyze this medical report:\n\n${extractedText}`;
     }
     
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
