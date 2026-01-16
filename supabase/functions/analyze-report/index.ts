@@ -11,11 +11,11 @@ serve(async (req) => {
   }
 
   try {
-    const { reportText, language = "en" } = await req.json();
+    const { reportText, imageData, language = "en" } = await req.json();
     
-    if (!reportText || typeof reportText !== "string") {
+    if (!reportText && !imageData) {
       return new Response(
-        JSON.stringify({ error: "Report text is required" }),
+        JSON.stringify({ error: "Please upload a medical report (image or text file)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -34,17 +34,16 @@ serve(async (req) => {
       : "";
 
     const systemPrompt = `You are a medical report validator and translator. Your job is to:
-1. FIRST: Determine if the document is a legitimate medical report
+1. FIRST: Determine if the document/image is a legitimate medical report
 2. ONLY if it's a valid medical report: Explain it in simple terms
 
 A document is considered a VALID medical report if it contains:
 - Hospital name, clinic name, or laboratory name
-- Patient information
+- Patient information (name, age, date, etc.)
 - Medical test results, diagnoses, or clinical findings
-- Doctor's name or medical professional signature
 - Medical terminology and health-related data
 
-If the document is NOT a valid medical report (e.g., random text, non-medical documents, general articles, etc.), you MUST respond with exactly this JSON:
+If the document is NOT a valid medical report (e.g., random images, non-medical documents, screenshots of unrelated content, etc.), you MUST respond with exactly this JSON:
 {"isValid": false, "error": "This does not appear to be a medical report. Please upload a document from a hospital, clinic, or laboratory that contains your test results or diagnosis."}
 
 If it IS a valid medical report, respond with this JSON structure:
@@ -61,11 +60,24 @@ ${languageInstructions}
 IMPORTANT RULES:
 - Be STRICT about validation - only accept genuine medical reports
 - Do NOT make up or assume medical values - only use what's in the actual report
+- Extract and explain the ACTUAL values shown in the report
 - Keep each finding, precaution, and next step concise (1-2 sentences max)
 - Include 3-5 items in each array based on what the report actually contains
 - ONLY output valid JSON, no additional text`;
 
     console.log("Calling Lovable AI Gateway for report validation and analysis...");
+    
+    // Build the messages based on whether we have text or image
+    let userContent: any;
+    if (imageData) {
+      // For images, use multimodal format
+      userContent = [
+        { type: "text", text: "Please validate and analyze this medical report image. Extract the actual values and findings shown:" },
+        { type: "image_url", image_url: { url: imageData } }
+      ];
+    } else {
+      userContent = `Please validate and analyze this medical report:\n\n${reportText}`;
+    }
     
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -77,7 +89,7 @@ IMPORTANT RULES:
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Please validate and analyze this document:\n\n${reportText}` }
+          { role: "user", content: userContent }
         ],
         temperature: 0.2,
       }),
