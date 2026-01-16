@@ -33,27 +33,39 @@ serve(async (req) => {
       ? `Provide the entire response in the language with code "${language}".` 
       : "";
 
-    const systemPrompt = `You are a compassionate medical report translator who helps patients understand their health reports in simple, clear language. Your goal is to:
-1. Explain complex medical terminology in everyday words
-2. Highlight important findings without causing unnecessary alarm
-3. Provide actionable health advice
-4. Be reassuring while remaining accurate
+    const systemPrompt = `You are a medical report validator and translator. Your job is to:
+1. FIRST: Determine if the document is a legitimate medical report
+2. ONLY if it's a valid medical report: Explain it in simple terms
 
-${languageInstructions}
+A document is considered a VALID medical report if it contains:
+- Hospital name, clinic name, or laboratory name
+- Patient information
+- Medical test results, diagnoses, or clinical findings
+- Doctor's name or medical professional signature
+- Medical terminology and health-related data
 
-You MUST respond with a valid JSON object using this exact structure:
+If the document is NOT a valid medical report (e.g., random text, non-medical documents, general articles, etc.), you MUST respond with exactly this JSON:
+{"isValid": false, "error": "This does not appear to be a medical report. Please upload a document from a hospital, clinic, or laboratory that contains your test results or diagnosis."}
+
+If it IS a valid medical report, respond with this JSON structure:
 {
+  "isValid": true,
   "summary": "A 2-3 sentence overview of the report in simple terms",
   "keyFindings": ["Finding 1 explained simply", "Finding 2 explained simply", ...],
   "precautions": ["Precaution 1", "Precaution 2", ...],
   "nextSteps": ["Step 1", "Step 2", ...]
 }
 
-Keep each finding, precaution, and next step concise (1-2 sentences max).
-Include 3-5 items in each array.
-ONLY output the JSON, no additional text.`;
+${languageInstructions}
 
-    console.log("Calling Lovable AI Gateway for report analysis...");
+IMPORTANT RULES:
+- Be STRICT about validation - only accept genuine medical reports
+- Do NOT make up or assume medical values - only use what's in the actual report
+- Keep each finding, precaution, and next step concise (1-2 sentences max)
+- Include 3-5 items in each array based on what the report actually contains
+- ONLY output valid JSON, no additional text`;
+
+    console.log("Calling Lovable AI Gateway for report validation and analysis...");
     
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -65,9 +77,9 @@ ONLY output the JSON, no additional text.`;
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Please analyze this medical report and explain it in simple terms:\n\n${reportText}` }
+          { role: "user", content: `Please validate and analyze this document:\n\n${reportText}` }
         ],
-        temperature: 0.3,
+        temperature: 0.2,
       }),
     });
 
@@ -104,23 +116,36 @@ ONLY output the JSON, no additional text.`;
     }
 
     // Parse the JSON response
-    let analysis;
+    let result;
     try {
-      // Remove markdown code blocks if present
       const cleanContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      analysis = JSON.parse(cleanContent);
+      result = JSON.parse(cleanContent);
     } catch (parseError) {
       console.error("Failed to parse AI response as JSON:", content);
-      // Fallback structure
-      analysis = {
-        summary: content.substring(0, 500),
-        keyFindings: ["Please upload a clearer report for detailed analysis"],
-        precautions: ["Consult with your healthcare provider for personalized advice"],
-        nextSteps: ["Schedule a follow-up with your doctor to discuss these results"]
-      };
+      return new Response(
+        JSON.stringify({ error: "Failed to process the document. Please try uploading a clearer medical report." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log("Report analysis completed successfully");
+    // Check if the document was validated as a medical report
+    if (result.isValid === false) {
+      console.log("Document rejected: not a valid medical report");
+      return new Response(
+        JSON.stringify({ error: result.error || "This does not appear to be a medical report. Please upload a document from a hospital, clinic, or laboratory." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Return the valid analysis
+    const analysis = {
+      summary: result.summary,
+      keyFindings: result.keyFindings || [],
+      precautions: result.precautions || [],
+      nextSteps: result.nextSteps || []
+    };
+
+    console.log("Medical report validated and analyzed successfully");
 
     return new Response(
       JSON.stringify({ analysis }),
