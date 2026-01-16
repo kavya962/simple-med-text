@@ -66,7 +66,7 @@ const Index = () => {
     setCurrentFileName(file.name);
 
     try {
-      let requestBody: { reportText?: string; imageData?: string; language: string } = { language };
+      let requestBody: { reportText?: string; imageData?: string; pdfData?: string; language: string } = { language };
 
       // Handle different file types
       if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
@@ -77,12 +77,13 @@ const Index = () => {
         const base64 = await fileToBase64(file);
         requestBody.imageData = base64;
       } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-        // PDFs - inform user we need image/text for now
-        throw new Error('PDF files are not yet supported. Please upload an image (JPG, PNG) of your medical report or a text file.');
+        // PDFs - convert to base64 for server-side parsing
+        const base64 = await fileToBase64(file);
+        requestBody.pdfData = base64;
       } else if (file.name.endsWith('.doc') || file.name.endsWith('.docx')) {
-        throw new Error('Word documents are not yet supported. Please upload an image (JPG, PNG) of your medical report or a text file.');
+        throw new Error('Word documents are not yet supported. Please upload a PDF, image (JPG, PNG), or text file.');
       } else {
-        throw new Error('Unsupported file format. Please upload an image (JPG, PNG) or text file.');
+        throw new Error('Unsupported file format. Please upload a PDF, image (JPG, PNG), or text file.');
       }
 
       const { data, error } = await supabase.functions.invoke('analyze-report', {
