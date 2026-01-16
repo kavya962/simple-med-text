@@ -16,6 +16,7 @@ const languages = [
   { code: 'fr', name: 'Français' },
   { code: 'de', name: 'Deutsch' },
   { code: 'hi', name: 'हिन्दी' },
+  { code: 'te', name: 'తెలుగు' },
   { code: 'zh', name: '中文' },
 ];
 
