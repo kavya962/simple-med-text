@@ -50,20 +50,13 @@ const Index = () => {
     }
   };
 
-  const extractTextFromFile = async (file: File): Promise<string> => {
-    // For text-based files, read directly
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-      return await file.text();
-    }
-    
-    // For images, we'll send a description
-    if (file.type.startsWith('image/')) {
-      return `[Medical report image uploaded: ${file.name}. Please analyze this as a typical medical lab report with common health metrics like blood tests, cholesterol levels, glucose, etc.]`;
-    }
-    
-    // For PDFs and documents, we'll extract what we can or use the filename
-    // In a production app, you'd use a document parsing service
-    return `[Medical document uploaded: ${file.name}. Please provide a general analysis template for a typical medical report covering common lab values, health indicators, and recommendations.]`;
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
   };
 
   const handleFileSelect = useCallback(async (file: File) => {
@@ -73,10 +66,27 @@ const Index = () => {
     setCurrentFileName(file.name);
 
     try {
-      const reportText = await extractTextFromFile(file);
-      
+      let requestBody: { reportText?: string; imageData?: string; language: string } = { language };
+
+      // Handle different file types
+      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        // Text files - read directly
+        requestBody.reportText = await file.text();
+      } else if (file.type.startsWith('image/')) {
+        // Images - convert to base64 for multimodal AI
+        const base64 = await fileToBase64(file);
+        requestBody.imageData = base64;
+      } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        // PDFs - inform user we need image/text for now
+        throw new Error('PDF files are not yet supported. Please upload an image (JPG, PNG) of your medical report or a text file.');
+      } else if (file.name.endsWith('.doc') || file.name.endsWith('.docx')) {
+        throw new Error('Word documents are not yet supported. Please upload an image (JPG, PNG) of your medical report or a text file.');
+      } else {
+        throw new Error('Unsupported file format. Please upload an image (JPG, PNG) or text file.');
+      }
+
       const { data, error } = await supabase.functions.invoke('analyze-report', {
-        body: { reportText, language }
+        body: requestBody
       });
 
       if (error) {
