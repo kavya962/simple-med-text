@@ -5,7 +5,9 @@ import { FileUpload } from '@/components/FileUpload';
 import { ReportAnalysis } from '@/components/ReportAnalysis';
 import { ChatInterface } from '@/components/ChatInterface';
 import { FeatureCards } from '@/components/FeatureCards';
+import { ReportHistory } from '@/components/ReportHistory';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   id: string;
@@ -70,18 +72,49 @@ const Index = () => {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [currentFileName, setCurrentFileName] = useState<string>('');
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
+
+  const saveToHistory = async (fileName: string, analysisData: Analysis) => {
+    const { error } = await supabase.from('report_history').insert({
+      file_name: fileName,
+      summary: analysisData.summary,
+      key_findings: analysisData.keyFindings,
+      precautions: analysisData.precautions,
+      next_steps: analysisData.nextSteps,
+      language
+    });
+
+    if (error) {
+      console.error('Error saving to history:', error);
+    } else {
+      setHistoryRefreshTrigger(prev => prev + 1);
+    }
+  };
 
   const handleFileSelect = useCallback(async (file: File) => {
     setIsProcessing(true);
     setAnalysis(null);
     setMessages([]);
+    setCurrentFileName(file.name);
 
     // Simulate AI processing
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    setAnalysis(getDemoAnalysis());
+    const newAnalysis = getDemoAnalysis();
+    setAnalysis(newAnalysis);
     setIsProcessing(false);
     toast.success('Report analyzed successfully!');
+
+    // Save to history
+    await saveToHistory(file.name, newAnalysis);
+  }, [language]);
+
+  const handleSelectFromHistory = useCallback((analysisData: Analysis, fileName: string) => {
+    setAnalysis(analysisData);
+    setCurrentFileName(fileName);
+    setMessages([]);
+    toast.success(`Loaded: ${fileName}`);
   }, []);
 
   const handleSendMessage = useCallback(async (content: string) => {
@@ -109,6 +142,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <ReportHistory 
+        onSelectReport={handleSelectFromHistory}
+        refreshTrigger={historyRefreshTrigger}
+      />
       <Header 
         selectedLanguage={language} 
         onLanguageChange={setLanguage} 
