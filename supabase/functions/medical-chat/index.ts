@@ -1,9 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+// Allowed origins for CORS - restrict to your application domains
+const ALLOWED_ORIGINS = [
+  "https://id-preview--21e8aa03-4f1b-4cbb-8baa-5114faccad0c.lovable.app",
+  "https://21e8aa03-4f1b-4cbb-8baa-5114faccad0c.lovableproject.com",
+  "http://localhost:8080",
+  "http://localhost:5173",
+];
+
+// Get CORS headers based on request origin
+const getCorsHeaders = (origin: string | null) => {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.some(allowed => 
+    origin === allowed || origin.endsWith('.lovable.app') || origin.endsWith('.lovableproject.com')
+  ) ? origin : ALLOWED_ORIGINS[0];
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Access-Control-Allow-Credentials": "true",
+  };
 };
 
 // Validation constants
@@ -25,18 +41,21 @@ const validateReportContext = (context: unknown): { valid: boolean; error?: stri
   }
   
   if (typeof context !== 'object') {
-    return { valid: false, error: "Report context must be an object" };
+    return { valid: false, error: "Invalid context format" };
   }
   
   const contextStr = JSON.stringify(context);
   if (contextStr.length > MAX_CONTEXT_LENGTH) {
-    return { valid: false, error: `Report context too large. Maximum ${MAX_CONTEXT_LENGTH} characters allowed` };
+    return { valid: false, error: "Context too large" };
   }
   
   return { valid: true };
 };
 
 serve(async (req) => {
+  const origin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -62,7 +81,7 @@ serve(async (req) => {
     if (authError || !claimsData?.claims) {
       console.error("Authentication error:", authError);
       return new Response(
-        JSON.stringify({ error: "Invalid authentication token" }),
+        JSON.stringify({ error: "Authentication failed" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -76,7 +95,7 @@ serve(async (req) => {
       requestBody = await req.json();
     } catch {
       return new Response(
-        JSON.stringify({ error: "Invalid JSON in request body" }),
+        JSON.stringify({ error: "Invalid request format" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -93,14 +112,14 @@ serve(async (req) => {
 
     if (typeof question !== 'string') {
       return new Response(
-        JSON.stringify({ error: "Question must be a string" }),
+        JSON.stringify({ error: "Invalid question format" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (question.length > MAX_QUESTION_LENGTH) {
       return new Response(
-        JSON.stringify({ error: `Question too long. Maximum ${MAX_QUESTION_LENGTH} characters allowed` }),
+        JSON.stringify({ error: "Question too long" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -134,8 +153,8 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) {
       console.error("LOVABLE_API_KEY is not configured");
       return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Service temporarily unavailable" }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -176,23 +195,13 @@ ${reportContext ? `Context from the patient's medical report:\n${JSON.stringify(
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
+      
+      // Return generic error for all AI gateway failures
       return new Response(
-        JSON.stringify({ error: "Failed to get response" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Unable to process your request. Please try again." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -202,8 +211,8 @@ ${reportContext ? `Context from the patient's medical report:\n${JSON.stringify(
     if (!content) {
       console.error("No content in AI response");
       return new Response(
-        JSON.stringify({ error: "Failed to get response from AI" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Unable to process your request. Please try again." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -217,8 +226,8 @@ ${reportContext ? `Context from the patient's medical report:\n${JSON.stringify(
   } catch (error) {
     console.error("medical-chat error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: "An unexpected error occurred. Please try again." }),
+      { status: 500, headers: { ...getCorsHeaders(req.headers.get("Origin")), "Content-Type": "application/json" } }
     );
   }
 });
