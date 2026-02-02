@@ -6,6 +6,36 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Validation constants
+const MAX_QUESTION_LENGTH = 2000; // 2000 characters max for questions
+const MAX_CONTEXT_LENGTH = 50000; // 50K characters max for report context
+const VALID_LANGUAGES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'hi', 'ar', 'zh', 'ja', 'ko', 'ru'];
+
+// Sanitize text input to prevent prompt injection
+const sanitizeInput = (input: string): string => {
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+    .trim();
+};
+
+// Validate report context structure
+const validateReportContext = (context: unknown): { valid: boolean; error?: string } => {
+  if (context === null || context === undefined) {
+    return { valid: true }; // Context is optional
+  }
+  
+  if (typeof context !== 'object') {
+    return { valid: false, error: "Report context must be an object" };
+  }
+  
+  const contextStr = JSON.stringify(context);
+  if (contextStr.length > MAX_CONTEXT_LENGTH) {
+    return { valid: false, error: `Report context too large. Maximum ${MAX_CONTEXT_LENGTH} characters allowed` };
+  }
+  
+  return { valid: true };
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -40,14 +70,65 @@ serve(async (req) => {
     const userId = claimsData.claims.sub;
     console.log("Authenticated user:", userId);
 
-    const { question, reportContext, language = "en" } = await req.json();
+    // Parse request body
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let { question, reportContext, language = "en" } = requestBody;
     
+    // Validate question
     if (!question) {
       return new Response(
         JSON.stringify({ error: "Question is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    if (typeof question !== 'string') {
+      return new Response(
+        JSON.stringify({ error: "Question must be a string" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (question.length > MAX_QUESTION_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Question too long. Maximum ${MAX_QUESTION_LENGTH} characters allowed` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Sanitize question
+    question = sanitizeInput(question);
+    if (question.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Question cannot be empty" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate language code
+    if (typeof language !== 'string' || !VALID_LANGUAGES.includes(language)) {
+      language = 'en';
+    }
+
+    // Validate report context
+    const contextValidation = validateReportContext(reportContext);
+    if (!contextValidation.valid) {
+      return new Response(
+        JSON.stringify({ error: contextValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Input validation passed");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {

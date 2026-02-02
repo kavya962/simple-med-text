@@ -6,6 +6,40 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Validation constants
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_TEXT_LENGTH = 100000; // 100K characters
+const VALID_LANGUAGES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'hi', 'ar', 'zh', 'ja', 'ko', 'ru'];
+const BASE64_DATA_URI_REGEX = /^data:[a-z]+\/[a-z0-9\-+.]+;base64,/i;
+
+// Validate base64 data URI format and estimate size
+const validateBase64Data = (data: string, fieldName: string): { valid: boolean; error?: string } => {
+  if (typeof data !== 'string') {
+    return { valid: false, error: `${fieldName} must be a string` };
+  }
+  
+  if (!BASE64_DATA_URI_REGEX.test(data)) {
+    return { valid: false, error: `Invalid ${fieldName} format. Expected base64 data URI` };
+  }
+  
+  // Extract base64 content and estimate size
+  const base64Content = data.split(',')[1] || '';
+  const estimatedSize = (base64Content.length * 3) / 4;
+  
+  if (estimatedSize > MAX_FILE_SIZE) {
+    return { valid: false, error: `${fieldName} too large. Maximum size is 10MB` };
+  }
+  
+  return { valid: true };
+};
+
+// Sanitize text input to prevent prompt injection
+const sanitizeInput = (input: string): string => {
+  return input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+    .trim();
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -40,14 +74,78 @@ serve(async (req) => {
     const userId = claimsData.claims.sub;
     console.log("Authenticated user:", userId);
 
-    const { reportText, imageData, pdfData, language = "en" } = await req.json();
+    // Parse request body
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let { reportText, imageData, pdfData, language = "en" } = requestBody;
     
+    // Validate at least one input is provided
     if (!reportText && !imageData && !pdfData) {
       return new Response(
         JSON.stringify({ error: "Please upload a medical report (PDF, image, or text file)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Validate language code
+    if (typeof language !== 'string' || !VALID_LANGUAGES.includes(language)) {
+      language = 'en';
+    }
+
+    // Validate and sanitize text input
+    if (reportText) {
+      if (typeof reportText !== 'string') {
+        return new Response(
+          JSON.stringify({ error: "Report text must be a string" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (reportText.length > MAX_TEXT_LENGTH) {
+        return new Response(
+          JSON.stringify({ error: `Report text too large. Maximum ${MAX_TEXT_LENGTH} characters allowed` }),
+          { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      reportText = sanitizeInput(reportText);
+      if (reportText.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Report text cannot be empty" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Validate image data
+    if (imageData) {
+      const imageValidation = validateBase64Data(imageData, "Image");
+      if (!imageValidation.valid) {
+        return new Response(
+          JSON.stringify({ error: imageValidation.error }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Validate PDF data
+    if (pdfData) {
+      const pdfValidation = validateBase64Data(pdfData, "PDF");
+      if (!pdfValidation.valid) {
+        return new Response(
+          JSON.stringify({ error: pdfValidation.error }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    console.log("Input validation passed");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
