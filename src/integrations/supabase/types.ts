@@ -24,6 +24,7 @@ export type Database = {
           next_steps: Json
           precautions: Json
           summary: string
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -34,6 +35,7 @@ export type Database = {
           next_steps?: Json
           precautions?: Json
           summary: string
+          user_id: string
         }
         Update: {
           created_at?: string
@@ -44,6 +46,7 @@ export type Database = {
           next_steps?: Json
           precautions?: Json
           summary?: string
+          user_id?: string
         }
         Relationships: []
       }

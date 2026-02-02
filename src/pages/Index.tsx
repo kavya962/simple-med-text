@@ -32,7 +32,14 @@ const Index = () => {
   const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
 
   const saveToHistory = async (fileName: string, analysisData: Analysis) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('User must be authenticated to save reports');
+      return;
+    }
+
     const { error } = await supabase.from('report_history').insert({
+      user_id: user.id,
       file_name: fileName,
       summary: analysisData.summary,
       key_findings: analysisData.keyFindings,
