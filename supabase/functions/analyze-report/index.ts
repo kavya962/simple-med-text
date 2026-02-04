@@ -9,11 +9,11 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5173",
 ];
 
-// Get CORS headers based on request origin
+// Get CORS headers based on request origin - strict whitelist only
 const getCorsHeaders = (origin: string | null) => {
-  const allowedOrigin = origin && ALLOWED_ORIGINS.some(allowed => 
-    origin === allowed || origin.endsWith('.lovable.app') || origin.endsWith('.lovableproject.com')
-  ) ? origin : ALLOWED_ORIGINS[0];
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : ALLOWED_ORIGINS[0];
   
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
@@ -83,7 +83,7 @@ serve(async (req) => {
 
     const { data: claimsData, error: authError } = await supabaseClient.auth.getClaims(token);
     if (authError || !claimsData?.claims) {
-      console.error("Authentication error:", authError);
+      console.error("Authentication failed");
       return new Response(
         JSON.stringify({ error: "Authentication failed" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -91,7 +91,6 @@ serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub;
-    console.log("Authenticated user:", userId);
 
     // Parse request body
     let requestBody;
@@ -253,8 +252,7 @@ IMPORTANT RULES:
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("AI gateway request failed");
       
       // Return generic error for all AI gateway failures
       return new Response(
@@ -279,8 +277,8 @@ IMPORTANT RULES:
     try {
       const cleanContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       result = JSON.parse(cleanContent);
-    } catch (parseError) {
-      console.error("Failed to parse AI response as JSON:", content);
+    } catch {
+      console.error("Failed to parse AI response");
       return new Response(
         JSON.stringify({ error: "Unable to process the document. Please try uploading a clearer image." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
