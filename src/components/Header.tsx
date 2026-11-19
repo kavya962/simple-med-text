@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 
 const languages = [
   { code: 'en', name: 'English' },
@@ -29,6 +30,7 @@ export const Header = ({ selectedLanguage, onLanguageChange }: HeaderProps) => {
   const currentLanguage = languages.find(l => l.code === selectedLanguage) || languages[0];
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
 
   const handleSignOut = async () => {
     await signOut();
@@ -88,6 +90,9 @@ export const Header = ({ selectedLanguage, onLanguageChange }: HeaderProps) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => navigate('/admin/support')}>Support inbox</DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleSignOut} className="gap-2 text-destructive">
                   <LogOut className="w-4 h-4" />
                   Sign Out
