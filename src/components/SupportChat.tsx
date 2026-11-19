@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { LifeBuoy, X, Send, Loader2, UserRound, Mail } from 'lucide-react';
+import { Bot, LifeBuoy, X, Send, Loader2, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -63,19 +63,14 @@ export const SupportChat = () => {
         <div className="fixed bottom-5 right-5 z-50 w-[calc(100vw-2.5rem)] max-w-sm h-[min(560px,calc(100vh-2.5rem))] bg-card border border-border rounded-2xl shadow-xl flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
             <div className="flex items-center gap-2">
-              <LifeBuoy className="w-5 h-5" />
+              <Bot className="w-5 h-5" />
               <div>
-                <p className="font-semibold text-sm">MediClear Support</p>
+                <p className="font-semibold text-sm">MediClear AI Bot</p>
                 <p className="text-xs opacity-80">{status === 'needs_human' ? 'A team member will reply here' : 'Ask about the app or your reports'}</p>
               </div>
             </div>
             <Button size="icon" variant="ghost" aria-label="Close support chat" onClick={() => setOpen(false)}><X className="w-5 h-5" /></Button>
           </div>
-
-          <a href="mailto:p87090406@gmail.com" className="flex items-center justify-center gap-2 border-b border-border px-3 py-2 text-sm text-primary hover:underline">
-            <Mail className="h-4 w-4 shrink-0" />
-            <span className="break-all">p87090406@gmail.com</span>
-          </a>
 
           {!user ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -93,6 +88,9 @@ export const SupportChat = () => {
                     <div className={m.sender === 'user'
                       ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-3 py-2 text-sm whitespace-pre-wrap'
                       : 'max-w-[85%] text-sm text-foreground whitespace-pre-wrap'}>
+                      {m.sender === 'assistant' && (
+                        <span className="flex items-center gap-1 text-xs font-medium text-primary mb-1"><Bot className="w-3 h-3" /> AI Bot</span>
+                      )}
                       {m.sender === 'agent' && (
                         <span className="flex items-center gap-1 text-xs font-medium text-accent mb-1"><UserRound className="w-3 h-3" /> Support team</span>
                       )}
