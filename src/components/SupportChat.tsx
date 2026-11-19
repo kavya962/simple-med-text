@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { LifeBuoy, X, Send, Loader2, UserRound } from 'lucide-react';
+import { LifeBuoy, X, Send, Loader2, UserRound, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -69,8 +69,13 @@ export const SupportChat = () => {
                 <p className="text-xs opacity-80">{status === 'needs_human' ? 'A team member will reply here' : 'Ask about the app or your reports'}</p>
               </div>
             </div>
-            <button aria-label="Close support chat" onClick={() => setOpen(false)}><X className="w-5 h-5" /></button>
+            <Button size="icon" variant="ghost" aria-label="Close support chat" onClick={() => setOpen(false)}><X className="w-5 h-5" /></Button>
           </div>
+
+          <a href="mailto:p87090406@gmail.com" className="flex items-center justify-center gap-2 border-b border-border px-3 py-2 text-sm text-primary hover:underline">
+            <Mail className="h-4 w-4 shrink-0" />
+            <span className="break-all">p87090406@gmail.com</span>
+          </a>
 
           {!user ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
